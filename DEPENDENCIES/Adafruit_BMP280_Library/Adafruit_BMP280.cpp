@@ -21,16 +21,18 @@
 
 #include "Adafruit_BMP280.h"
 #include "Arduino.h"
-#include <Wire.h>
+#include <I2C.h>
+
+#define I2C_TIMEOUT_MS 10
 
 /*!
  * @brief  BMP280 constructor using i2c
- * @param  *theWire
- *         optional wire
+ * @param  *theI2c
+ *         optional i2c
  */
-Adafruit_BMP280::Adafruit_BMP280(TwoWire *theWire)
+Adafruit_BMP280::Adafruit_BMP280(I2C *theI2c)
 {
-  _wire = theWire;
+  _i2c = theI2c;
   temp_sensor = new Adafruit_BMP280_Temp(this);
   pressure_sensor = new Adafruit_BMP280_Pressure(this);
   memset(&_configReg, 0, sizeof(_configReg));
@@ -53,8 +55,9 @@ bool Adafruit_BMP280::begin(uint8_t addr, uint8_t chipid) {
   _i2caddr = addr;
 
   // i2c
-  _wire->begin();
-  _wire->setClock(I2C_RATE);
+  _i2c->begin();
+  // set a timeout
+  _i2c->timeOut(I2C_TIMEOUT_MS);
 
   if (read8(BMP280_REGISTER_CHIPID) != chipid)
     return false;
@@ -101,10 +104,7 @@ void Adafruit_BMP280::setSampling(sensor_mode mode,
 */
 /**************************************************************************/
 void Adafruit_BMP280::write8(byte reg, byte value) {
-  _wire->beginTransmission((uint8_t)_i2caddr);
-  _wire->write((uint8_t)reg);
-  _wire->write((uint8_t)value);
-  _wire->endTransmission();
+  _i2c->write((uint8_t)_i2caddr, (uint8_t)reg, (uint8_t)value);
 }
 
 /*!
@@ -115,12 +115,7 @@ void Adafruit_BMP280::write8(byte reg, byte value) {
  */
 uint8_t Adafruit_BMP280::read8(byte reg) {
   uint8_t value;
-
-  _wire->beginTransmission((uint8_t)_i2caddr);
-  _wire->write((uint8_t)reg);
-  _wire->endTransmission();
-  _wire->requestFrom((uint8_t)_i2caddr, (byte)1);
-  value = _wire->read();
+  _i2c->read((uint8_t)_i2caddr, (uint8_t)reg, 1, &value);
   return value;
 }
 
@@ -128,15 +123,11 @@ uint8_t Adafruit_BMP280::read8(byte reg) {
  *  @brief  Reads a 16 bit value over I2C
  */
 uint16_t Adafruit_BMP280::read16(byte reg) {
-  uint16_t value;
+  uint8_t buffer[2];
 
-  _wire->beginTransmission((uint8_t)_i2caddr);
-  _wire->write((uint8_t)reg);
-  _wire->endTransmission();
-  _wire->requestFrom((uint8_t)_i2caddr, (byte)2);
-  value = (_wire->read() << 8) | _wire->read();
+  _i2c->read((uint8_t)_i2caddr, (uint8_t)reg, 2, (uint8_t*)buffer);
 
-  return value;
+  return (((uint16_t)buffer[0] << 8) | (uint16_t)buffer[1]);
 }
 
 uint16_t Adafruit_BMP280::read16_LE(byte reg) {
@@ -157,20 +148,11 @@ int16_t Adafruit_BMP280::readS16_LE(byte reg) {
  *  @brief  Reads a 24 bit value over I2C
  */
 uint32_t Adafruit_BMP280::read24(byte reg) {
-  uint32_t value;
+  uint8_t buffer[3];
 
-  _wire->beginTransmission((uint8_t)_i2caddr);
-  _wire->write((uint8_t)reg);
-  _wire->endTransmission();
-  _wire->requestFrom((uint8_t)_i2caddr, (byte)3);
+  _i2c->read((uint8_t)_i2caddr, (uint8_t)reg, 3, (uint8_t*)buffer);
 
-  value = _wire->read();
-  value <<= 8;
-  value |= _wire->read();
-  value <<= 8;
-  value |= _wire->read();
-
-  return value;
+  return (((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | (uint32_t)buffer[2]);
 }
 
 /*!

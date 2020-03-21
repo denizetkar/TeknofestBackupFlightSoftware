@@ -23,11 +23,7 @@
 
 #include "Adafruit_Sensor.h"
 #include "Arduino.h"
-#include <Wire.h>
-
-#ifndef I2C_RATE
-#define I2C_RATE 100000
-#endif
+#include <I2C.h>
 
 /*!
  *  I2C ADDRESS/BITS/SETTINGS
@@ -37,9 +33,9 @@
   (0x77)                     /**< Alternative I2C address for the sensor. */
 #define BMP280_CHIPID (0x58) /**< Default chip ID. */
 
-//  Forward declaration of Wire for board/variant combinations that
-//  don't have a default 'Wire'
-extern TwoWire Wire; /**< Forward declaration of Wire object */
+//  Forward declaration of I2c for board/variant combinations that
+//  don't have a default 'I2c'
+extern I2C I2c; /**< Forward declaration of I2c object */
 
 /*!
  * Registers available on the sensor.
@@ -184,7 +180,7 @@ public:
     STANDBY_MS_4000 = 0x07
   };
 
-  Adafruit_BMP280(TwoWire *theWire = &Wire);
+  Adafruit_BMP280(I2C *theI2c = &I2c);
   ~Adafruit_BMP280(void);
 
   bool begin(uint8_t addr = BMP280_ADDRESS, uint8_t chipid = BMP280_CHIPID);
@@ -207,7 +203,7 @@ public:
                    standby_duration duration = STANDBY_MS_1);
 
 private:
-  TwoWire *_wire; /**< Wire object */
+  I2C *_i2c; /**< I2C object */
 
   Adafruit_BMP280_Temp *temp_sensor = NULL;
   Adafruit_BMP280_Pressure *pressure_sensor = NULL;
