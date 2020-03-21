@@ -28,7 +28,6 @@ Adafruit_BMP280 bmp; // I2C
 
 // The serial object to communicate with the main computer
 NeoSWSerial main_s(MAIN_COMP_TX_PIN, MAIN_COMP_RX_PIN);
-PJON<ThroughSerialAsync> secure_ms(REDUNDANT_COMP_BUS_ID);
 
 //------------------------------------------------------------------------------------------------
 //---------------------setup and loop constants---------------------------------------------------
@@ -61,6 +60,8 @@ void receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info
 //---------------------setup function-------------------------------------------------------------
 
 void setup() {
+  PJON<ThroughSerialAsync> secure_ms(REDUNDANT_COMP_BUS_ID);
+
   Serial.begin(230400);
   while (!Serial);
 
