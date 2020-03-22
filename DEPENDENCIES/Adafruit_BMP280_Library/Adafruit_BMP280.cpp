@@ -52,6 +52,7 @@ Adafruit_BMP280::~Adafruit_BMP280(void) {
  *  @return True if the init was successful, otherwise false.
  */
 bool Adafruit_BMP280::begin(uint8_t addr, uint8_t chipid) {
+  uint8_t res;
   _i2caddr = addr;
 
   // i2c
@@ -59,12 +60,16 @@ bool Adafruit_BMP280::begin(uint8_t addr, uint8_t chipid) {
   // set a timeout
   _i2c->timeOut(I2C_TIMEOUT_MS);
 
-  if (read8(BMP280_REGISTER_CHIPID) != chipid)
+  if (readBytes(BMP280_REGISTER_CHIPID, &res, 1) != 0)
+    return false;
+  if (res != chipid)
     return false;
 
-  readCoefficients();
-  // write8(BMP280_REGISTER_CONTROL, 0x3F); /* needed? */
-  setSampling();
+  if (!readCoefficients())
+    return false;
+  // writeByte(BMP280_REGISTER_CONTROL, 0x3F); /* needed? */
+  if (!setSampling())
+    return false;
   delay(100);
   return true;
 }
@@ -82,7 +87,7 @@ bool Adafruit_BMP280::begin(uint8_t addr, uint8_t chipid) {
  * @param duration
  *        The sampling duration.
  */
-void Adafruit_BMP280::setSampling(sensor_mode mode,
+bool Adafruit_BMP280::setSampling(sensor_mode mode,
                                   sensor_sampling tempSampling,
                                   sensor_sampling pressSampling,
                                   sensor_filter filter,
@@ -94,94 +99,94 @@ void Adafruit_BMP280::setSampling(sensor_mode mode,
   _configReg.filter = filter;
   _configReg.t_sb = duration;
 
-  write8(BMP280_REGISTER_CONFIG, _configReg.get());
-  write8(BMP280_REGISTER_CONTROL, _measReg.get());
-}
+  if (writeByte(BMP280_REGISTER_CONFIG, _configReg.get()))
+    return false;
+  if (writeByte(BMP280_REGISTER_CONTROL, _measReg.get()))
+    return false;
 
-/**************************************************************************/
-/*!
-    @brief  Writes an 8 bit value over I2C
-*/
-/**************************************************************************/
-void Adafruit_BMP280::write8(byte reg, byte value) {
-  _i2c->write((uint8_t)_i2caddr, (uint8_t)reg, (uint8_t)value);
+  return true;
 }
 
 /*!
- *  @brief  Reads an 8 bit value over I2C
+ *  @brief  Writes a byte of value over I2C
  *  @param  reg
  *          selected register
- *  @return value from selected register
+ *  @param  value
+ *          1 byte of data to write
+ *  @return operation status
  */
-uint8_t Adafruit_BMP280::read8(byte reg) {
-  uint8_t value;
-  _i2c->read((uint8_t)_i2caddr, (uint8_t)reg, 1, &value);
-  return value;
+uint8_t Adafruit_BMP280::writeByte(uint8_t reg, uint8_t value) {
+  return _i2c->write(_i2caddr, reg, value);
 }
 
 /*!
- *  @brief  Reads a 16 bit value over I2C
+ *  @brief  Reads "length" byte(s) of value over I2C
+ *  @param  reg
+ *          selected register
+ *  @param  buffer
+ *          uint8_t buffer to read the data into
+ *  @param  length
+ *          number of available bytes in the buffer
+ *  @return operation status
  */
-uint16_t Adafruit_BMP280::read16(byte reg) {
-  uint8_t buffer[2];
-
-  _i2c->read((uint8_t)_i2caddr, (uint8_t)reg, 2, (uint8_t*)buffer);
-
-  return (((uint16_t)buffer[0] << 8) | (uint16_t)buffer[1]);
+uint8_t Adafruit_BMP280::readBytes(uint8_t reg, uint8_t *buffer, uint8_t length) {
+  return _i2c->read(_i2caddr, reg, length, buffer);
 }
 
-uint16_t Adafruit_BMP280::read16_LE(byte reg) {
-  uint16_t temp = read16(reg);
-  return (temp >> 8) | (temp << 8);
-}
+uint8_t Adafruit_BMP280::read24(byte reg, uint32_t *out) {
+  uint8_t buffer[3], res;
 
-/*!
- *   @brief  Reads a signed 16 bit value over I2C
- */
-int16_t Adafruit_BMP280::readS16(byte reg) { return (int16_t)read16(reg); }
+  res = _i2c->read((uint8_t)_i2caddr, (uint8_t)reg, 3, (uint8_t*)buffer);
+  if (res == 0) {
+    *out = (((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | (uint32_t)buffer[2]);
+  }
 
-int16_t Adafruit_BMP280::readS16_LE(byte reg) {
-  return (int16_t)read16_LE(reg);
-}
-
-/*!
- *  @brief  Reads a 24 bit value over I2C
- */
-uint32_t Adafruit_BMP280::read24(byte reg) {
-  uint8_t buffer[3];
-
-  _i2c->read((uint8_t)_i2caddr, (uint8_t)reg, 3, (uint8_t*)buffer);
-
-  return (((uint32_t)buffer[0] << 16) | ((uint32_t)buffer[1] << 8) | (uint32_t)buffer[2]);
+  return res;
 }
 
 /*!
  *  @brief  Reads the factory-set coefficients
  */
-void Adafruit_BMP280::readCoefficients() {
-  _bmp280_calib.dig_T1 = read16_LE(BMP280_REGISTER_DIG_T1);
-  _bmp280_calib.dig_T2 = readS16_LE(BMP280_REGISTER_DIG_T2);
-  _bmp280_calib.dig_T3 = readS16_LE(BMP280_REGISTER_DIG_T3);
+bool Adafruit_BMP280::readCoefficients() {
+  if (readBytes(BMP280_REGISTER_DIG_T1, (uint8_t*)&_bmp280_calib.dig_T1, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_T2, (uint8_t*)&_bmp280_calib.dig_T2, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_T3, (uint8_t*)&_bmp280_calib.dig_T3, 2))
+    return false;
 
-  _bmp280_calib.dig_P1 = read16_LE(BMP280_REGISTER_DIG_P1);
-  _bmp280_calib.dig_P2 = readS16_LE(BMP280_REGISTER_DIG_P2);
-  _bmp280_calib.dig_P3 = readS16_LE(BMP280_REGISTER_DIG_P3);
-  _bmp280_calib.dig_P4 = readS16_LE(BMP280_REGISTER_DIG_P4);
-  _bmp280_calib.dig_P5 = readS16_LE(BMP280_REGISTER_DIG_P5);
-  _bmp280_calib.dig_P6 = readS16_LE(BMP280_REGISTER_DIG_P6);
-  _bmp280_calib.dig_P7 = readS16_LE(BMP280_REGISTER_DIG_P7);
-  _bmp280_calib.dig_P8 = readS16_LE(BMP280_REGISTER_DIG_P8);
-  _bmp280_calib.dig_P9 = readS16_LE(BMP280_REGISTER_DIG_P9);
+  if (readBytes(BMP280_REGISTER_DIG_P1, (uint8_t*)&_bmp280_calib.dig_P1, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P2, (uint8_t*)&_bmp280_calib.dig_P2, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P3, (uint8_t*)&_bmp280_calib.dig_P3, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P4, (uint8_t*)&_bmp280_calib.dig_P4, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P5, (uint8_t*)&_bmp280_calib.dig_P5, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P6, (uint8_t*)&_bmp280_calib.dig_P6, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P7, (uint8_t*)&_bmp280_calib.dig_P7, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P8, (uint8_t*)&_bmp280_calib.dig_P8, 2))
+    return false;
+  if (readBytes(BMP280_REGISTER_DIG_P9, (uint8_t*)&_bmp280_calib.dig_P9, 2))
+    return false;
+
+  return true;
 }
 
 /*!
  * Reads the temperature from the device.
  * @return The temperature in degress celcius.
  */
-float Adafruit_BMP280::readTemperature() {
+bool Adafruit_BMP280::readTemperature(float *out) {
   int32_t var1, var2;
+  int32_t adc_T;
+  if (read24(BMP280_REGISTER_TEMPDATA, (uint32_t*)&adc_T))
+    return false;
 
-  int32_t adc_T = read24(BMP280_REGISTER_TEMPDATA);
   adc_T >>= 4;
 
   var1 = ((((adc_T >> 3) - ((int32_t)_bmp280_calib.dig_T1 << 1))) *
@@ -197,20 +202,26 @@ float Adafruit_BMP280::readTemperature() {
   t_fine = var1 + var2;
 
   float T = (t_fine * 5 + 128) >> 8;
-  return T / 100;
+  *out = T / 100;
+
+  return true;
 }
 
 /*!
  * Reads the barometric pressure from the device.
  * @return Barometric pressure in Pa.
  */
-float Adafruit_BMP280::readPressure() {
+bool Adafruit_BMP280::readPressure(float *out) {
   int64_t var1, var2, p;
 
   // Must be done first to get the t_fine variable set up
-  readTemperature();
+  if (!readTemperature((float*)&p))
+    return false;
 
-  int32_t adc_P = read24(BMP280_REGISTER_PRESSUREDATA);
+  int32_t adc_P;
+  if (read24(BMP280_REGISTER_PRESSUREDATA, (uint32_t*)&adc_P))
+    return false;
+
   adc_P >>= 4;
 
   var1 = ((int64_t)t_fine) - 128000;
@@ -223,7 +234,7 @@ float Adafruit_BMP280::readPressure() {
       (((((int64_t)1) << 47) + var1)) * ((int64_t)_bmp280_calib.dig_P1) >> 33;
 
   if (var1 == 0) {
-    return 0; // avoid exception caused by division by zero
+    return false; // avoid exception caused by division by zero
   }
   p = 1048576 - adc_P;
   p = (((p << 31) - var2) * 3125) / var1;
@@ -231,7 +242,9 @@ float Adafruit_BMP280::readPressure() {
   var2 = (((int64_t)_bmp280_calib.dig_P8) * p) >> 19;
 
   p = ((p + var1 + var2) >> 8) + (((int64_t)_bmp280_calib.dig_P7) << 4);
-  return (float)p / 256;
+  *out = (float)p / 256;
+
+  return true;
 }
 
 /*!
@@ -241,15 +254,16 @@ float Adafruit_BMP280::readPressure() {
  *        The current hPa at sea level.
  * @return The approximate altitude above sea level in meters.
  */
-float Adafruit_BMP280::readAltitude(float seaLevelhPa) {
-  float altitude;
+bool Adafruit_BMP280::readAltitude(float *out, float seaLevelhPa) {
+  float pressure;
+  if (!readPressure(&pressure)) // in Si units for Pascal
+    return false;
 
-  float pressure = readPressure(); // in Si units for Pascal
   pressure /= 100;
 
-  altitude = 44330 * (1.0 - pow(pressure / seaLevelhPa, 0.1903));
+  *out = 44330 * (1.0 - pow(pressure / seaLevelhPa, 0.1903));
 
-  return altitude;
+  return true;
 }
 
 /*!
@@ -270,32 +284,10 @@ float Adafruit_BMP280::seaLevelForAltitude(float altitude, float atmospheric) {
 }
 
 /*!
- *  @brief  Take a new measurement (only possible in forced mode)
- *  !!!todo!!!
- */
-/*
-void Adafruit_BMP280::takeForcedMeasurement()
-{
-    // If we are in forced mode, the BME sensor goes back to sleep after each
-    // measurement and we need to set it to forced mode once at this point, so
-    // it will take the next measurement and then return to sleep again.
-    // In normal mode simply does new measurements periodically.
-    if (_measReg.mode == MODE_FORCED) {
-        // set to forced mode, i.e. "take next measurement"
-        write8(BMP280_REGISTER_CONTROL, _measReg.get());
-        // wait until measurement has been completed, otherwise we would read
-        // the values from the last measurement
-        while (read8(BMP280_REGISTER_STATUS) & 0x08)
-                delay(1);
-    }
-}
-*/
-
-/*!
  *  @brief  Resets the chip via soft reset
  */
 void Adafruit_BMP280::reset(void) {
-  write8(BMP280_REGISTER_SOFTRESET, MODE_SOFT_RESET_CODE);
+  writeByte(BMP280_REGISTER_SOFTRESET, MODE_SOFT_RESET_CODE);
 }
 
 /*!
@@ -303,7 +295,9 @@ void Adafruit_BMP280::reset(void) {
     @return Sensor status as a byte.
  */
 uint8_t Adafruit_BMP280::getStatus(void) {
-  return read8(BMP280_REGISTER_STATUS);
+  uint8_t res;
+  readBytes(BMP280_REGISTER_STATUS, &res, 1);
+  return res;
 }
 
 /*!
@@ -359,7 +353,9 @@ bool Adafruit_BMP280_Temp::getEvent(sensors_event_t *event) {
   event->sensor_id = _sensorID;
   event->type = SENSOR_TYPE_AMBIENT_TEMPERATURE;
   event->timestamp = millis();
-  event->temperature = _theBMP280->readTemperature();
+  if (!_theBMP280->readTemperature(&event->temperature))
+    return false;
+
   return true;
 }
 
@@ -399,6 +395,8 @@ bool Adafruit_BMP280_Pressure::getEvent(sensors_event_t *event) {
   event->sensor_id = _sensorID;
   event->type = SENSOR_TYPE_PRESSURE;
   event->timestamp = millis();
-  event->pressure = _theBMP280->readPressure() / 100; // convert Pa to hPa
+  if (!_theBMP280->readPressure(&event->pressure))
+    return false;
+  event->pressure /= 100; // convert Pa to hPa
   return true;
 }

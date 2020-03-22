@@ -55,6 +55,7 @@ void receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info
      overwritten when a new message is dispatched */
   FLIGHT_STATE = payload[0];
 };
+float temp = 15.0, pressure = 101325.0, altitude = 0.0;
 
 //------------------------------------------------------------------------------------------------
 //---------------------setup function-------------------------------------------------------------
@@ -85,7 +86,8 @@ void setup() {
                   Adafruit_BMP280::FILTER_X16,      /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_1); /* Standby time. */
   delay(200);
-  ground_level_pressure_hpa = bmp.readPressure() / 100;
+  bmp.readPressure(&ground_level_pressure_hpa);
+  ground_level_pressure_hpa /= 100;
 
   // ODR = 125Hz
   bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
@@ -125,16 +127,19 @@ void setup() {
 
 void loop() {
 
+  bmp.readTemperature(&temp);
   Serial.print(F("Temperature = "));
-  Serial.print(bmp.readTemperature(), 6);
+  Serial.print(temp, 6);
   Serial.print(F(" *C"));
 
+  bmp.readPressure(&pressure);
   Serial.print(F("\tPressure = "));
-  Serial.print(bmp.readPressure(), 6);
+  Serial.print(pressure, 6);
   Serial.print(F(" Pa"));
 
+  bmp.readAltitude(&altitude, ground_level_pressure_hpa);
   Serial.print(F("\tHeight from ground = "));
-  Serial.print(bmp.readAltitude(ground_level_pressure_hpa), 6); /* Adjusted to local forecast! */
+  Serial.print(altitude, 6); /* Adjusted to local forecast! */
   Serial.println(F(" m"));
 
   Serial.println();

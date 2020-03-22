@@ -187,16 +187,15 @@ public:
   void reset(void);
   uint8_t getStatus(void);
 
-  float readTemperature();
-  float readPressure(void);
-  float readAltitude(float seaLevelhPa = 1013.25);
+  bool readTemperature(float *out);
+  bool readPressure(float *out);
+  bool readAltitude(float *out, float seaLevelhPa = 1013.25);
   float seaLevelForAltitude(float altitude, float atmospheric);
 
   Adafruit_Sensor *getTemperatureSensor(void);
   Adafruit_Sensor *getPressureSensor(void);
 
-  // void takeForcedMeasurement();
-  void setSampling(sensor_mode mode = MODE_NORMAL,
+  bool setSampling(sensor_mode mode = MODE_NORMAL,
                    sensor_sampling tempSampling = SAMPLING_X16,
                    sensor_sampling pressSampling = SAMPLING_X16,
                    sensor_filter filter = FILTER_OFF,
@@ -234,14 +233,10 @@ private:
     unsigned int get() { return (osrs_t << 5) | (osrs_p << 2) | mode; }
   };
 
-  void readCoefficients(void);
-  void write8(byte reg, byte value);
-  uint8_t read8(byte reg);
-  uint16_t read16(byte reg);
-  uint32_t read24(byte reg);
-  int16_t readS16(byte reg);
-  uint16_t read16_LE(byte reg);
-  int16_t readS16_LE(byte reg);
+  bool readCoefficients(void);
+  uint8_t writeByte(uint8_t reg, uint8_t value);
+  uint8_t readBytes(uint8_t reg, uint8_t *buffer, uint8_t length);
+  uint8_t read24(uint8_t reg, uint32_t *out);
 
   uint8_t _i2caddr;
 
