@@ -2,14 +2,14 @@
 #define NEO6MGPS_H
 
 #include <Arduino.h>
-#include <AltSoftSerial.h>
+#include <NeoSWSerial.h>
 #include <TinyGPS++.h>
 
 void lat_lon_to_x_y_m(double, double, double&, double&);
 
 class Neo6MGPS {
   public:
-    AltSoftSerial ss;
+    NeoSWSerial ss;
     TinyGPSPlus gps;
 
     Neo6MGPS(int, int);

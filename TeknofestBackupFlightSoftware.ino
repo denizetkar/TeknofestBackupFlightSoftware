@@ -2,7 +2,7 @@
 //---------------------includes-------------------------------------------------------------------
 
 #include <Adafruit_BMP280.h>
-#include <NeoSWSerial.h>
+//#include <AltSoftSerial.h>
 
 #include "Neo6MGPS.h"
 
@@ -13,6 +13,7 @@
 #include <PJON.h>
 
 #include "EarthPositionFilter.h"
+#include <Servo.h>
 
 //------------------------------------------------------------------------------------------------
 //---------------------definitions----------------------------------------------------------------
@@ -22,17 +23,22 @@
 
 #define MIN_NUM_GPS 6
 
-#define GPS_TX_PIN 8
-#define GPS_RX_PIN 9
+#define GPS_TX_PIN 2
+#define GPS_RX_PIN 3
 #define GPS_BAUD_RATE 9600
 
-#define MAIN_COMP_TX_PIN 2
-#define MAIN_COMP_RX_PIN 4
+#define MAIN_COMP_TX_PIN 8
+#define MAIN_COMP_RX_PIN 9
 #define MAIN_COMP_BAUD_RATE 9600
 #define REDUNDANT_COMP_BUS_ID 44
 #define MAIN_COMP_BUS_ID 45
 
 #define MAIN_COMP_TIMEOUT 1000
+
+#define CONTROLLER0_PINS 4
+#define CONTROLLER1_PINS 5
+#define CONTROLLER2_PINS 6
+#define CONTROLLER3_PINS 7
 
 //------------------------------------------------------------------------------------------------
 //---------------------setup and loop objects-----------------------------------------------------
@@ -44,6 +50,9 @@ Neo6MGPS neo6m(GPS_TX_PIN, GPS_RX_PIN);
 
 // Kalman Filter object for Altitude
 EarthPositionFilter alt_filter;
+
+// Servo object for controlling fins
+Servo fin_servo0, fin_servo1, fin_servo2, fin_servo3;
 
 //------------------------------------------------------------------------------------------------
 //---------------------setup and loop constants---------------------------------------------------
@@ -156,6 +165,15 @@ void setup() {
   neo6m.ss.begin(GPS_BAUD_RATE);
 
   // TODO: TAKE OVER ALL OF THE CONTROLS FROM THE MAIN COMPUTER !!!
+  fin_servo0.attach(CONTROLLER0_PINS);
+  fin_servo1.attach(CONTROLLER1_PINS);
+  fin_servo2.attach(CONTROLLER2_PINS);
+  fin_servo3.attach(CONTROLLER3_PINS);
+  // Set all fins at default angle (0 degrees)
+  fin_servo0.writeMicroseconds(1500);
+  fin_servo1.writeMicroseconds(1500);
+  fin_servo2.writeMicroseconds(1500);
+  fin_servo3.writeMicroseconds(1500);
   last_read_time = micros();
 }
 

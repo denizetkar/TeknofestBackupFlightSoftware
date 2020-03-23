@@ -27,7 +27,7 @@ void lat_lon_to_x_y_m(double lat, double lon, double &x, double &y)
 }
 
 Neo6MGPS::Neo6MGPS(int GPS_TX_PIN, int GPS_RX_PIN)
-  : ss{ /* GPS_TX_PIN, GPS_RX_PIN */ }
+  : ss{ GPS_TX_PIN, GPS_RX_PIN }
 {
 }
 
