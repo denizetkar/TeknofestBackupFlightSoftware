@@ -187,10 +187,10 @@ public:
   void reset(void);
   uint8_t getStatus(void);
 
-  bool readTemperature(float *out);
-  bool readPressure(float *out);
-  bool readAltitude(float *out, float seaLevelhPa = 1013.25);
-  float seaLevelForAltitude(float altitude, float atmospheric);
+  bool readTemperature(double *out);
+  bool readPressure(double *out);
+  bool readAltitude(double *out, double seaLevelhPa = 1013.25);
+  double seaLevelForAltitude(double altitude, double atmospheric);
 
   Adafruit_Sensor *getTemperatureSensor(void);
   Adafruit_Sensor *getPressureSensor(void);

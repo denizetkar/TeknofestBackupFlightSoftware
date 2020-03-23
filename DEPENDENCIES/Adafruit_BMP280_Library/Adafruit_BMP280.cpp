@@ -181,7 +181,7 @@ bool Adafruit_BMP280::readCoefficients() {
  * Reads the temperature from the device.
  * @return The temperature in degress celcius.
  */
-bool Adafruit_BMP280::readTemperature(float *out) {
+bool Adafruit_BMP280::readTemperature(double *out) {
   int32_t var1, var2;
   int32_t adc_T;
   if (read24(BMP280_REGISTER_TEMPDATA, (uint32_t*)&adc_T))
@@ -201,7 +201,7 @@ bool Adafruit_BMP280::readTemperature(float *out) {
 
   t_fine = var1 + var2;
 
-  float T = (t_fine * 5 + 128) >> 8;
+  double T = (t_fine * 5 + 128) >> 8;
   *out = T / 100;
 
   return true;
@@ -211,11 +211,11 @@ bool Adafruit_BMP280::readTemperature(float *out) {
  * Reads the barometric pressure from the device.
  * @return Barometric pressure in Pa.
  */
-bool Adafruit_BMP280::readPressure(float *out) {
+bool Adafruit_BMP280::readPressure(double *out) {
   int64_t var1, var2, p;
 
   // Must be done first to get the t_fine variable set up
-  if (!readTemperature((float*)&p))
+  if (!readTemperature((double*)&p))
     return false;
 
   int32_t adc_P;
@@ -242,7 +242,7 @@ bool Adafruit_BMP280::readPressure(float *out) {
   var2 = (((int64_t)_bmp280_calib.dig_P8) * p) >> 19;
 
   p = ((p + var1 + var2) >> 8) + (((int64_t)_bmp280_calib.dig_P7) << 4);
-  *out = (float)p / 256;
+  *out = (double)p / 256;
 
   return true;
 }
@@ -254,8 +254,8 @@ bool Adafruit_BMP280::readPressure(float *out) {
  *        The current hPa at sea level.
  * @return The approximate altitude above sea level in meters.
  */
-bool Adafruit_BMP280::readAltitude(float *out, float seaLevelhPa) {
-  float pressure;
+bool Adafruit_BMP280::readAltitude(double *out, double seaLevelhPa) {
+  double pressure;
   if (!readPressure(&pressure)) // in Si units for Pascal
     return false;
 
@@ -273,7 +273,7 @@ bool Adafruit_BMP280::readAltitude(float *out, float seaLevelhPa) {
  * @param  atmospheric   Atmospheric pressure in hPa
  * @return The approximate pressure
  */
-float Adafruit_BMP280::seaLevelForAltitude(float altitude, float atmospheric) {
+double Adafruit_BMP280::seaLevelForAltitude(double altitude, double atmospheric) {
   // Equation taken from BMP180 datasheet (page 17):
   // http://www.adafruit.com/datasheets/BST-BMP180-DS000-09.pdf
 

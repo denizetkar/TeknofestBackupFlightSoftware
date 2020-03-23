@@ -4,18 +4,31 @@
 #include <Adafruit_BMP280.h>
 #include <NeoSWSerial.h>
 
+#include "Neo6MGPS.h"
+
 #define TSA_TIME_IN 0
 #define TSA_RESPONSE_TIME_OUT 5000
 #define PJON_MAX_PACKETS 0
 #define PJON_PACKET_MAX_LENGTH 16
 #include <PJON.h>
 
+#include "EarthPositionFilter.h"
+
 //------------------------------------------------------------------------------------------------
 //---------------------definitions----------------------------------------------------------------
 
+#define BMP280_ALT_VAR 2500
+#define GPS_ALT_VAR 9
+
+#define MIN_NUM_GPS 6
+
+#define GPS_TX_PIN 8
+#define GPS_RX_PIN 9
+#define GPS_BAUD_RATE 9600
+
 #define MAIN_COMP_TX_PIN 2
 #define MAIN_COMP_RX_PIN 4
-#define MAIN_COMP_BAUD_RATE 38400
+#define MAIN_COMP_BAUD_RATE 9600
 #define REDUNDANT_COMP_BUS_ID 44
 #define MAIN_COMP_BUS_ID 45
 
@@ -26,8 +39,11 @@
 
 Adafruit_BMP280 bmp; // I2C
 
-// The serial object to communicate with the main computer
-NeoSWSerial main_s(MAIN_COMP_TX_PIN, MAIN_COMP_RX_PIN);
+// The Neo-6M GPS object
+Neo6MGPS neo6m(GPS_TX_PIN, GPS_RX_PIN);
+
+// Kalman Filter object for Altitude
+EarthPositionFilter alt_filter;
 
 //------------------------------------------------------------------------------------------------
 //---------------------setup and loop constants---------------------------------------------------
@@ -35,7 +51,6 @@ NeoSWSerial main_s(MAIN_COMP_TX_PIN, MAIN_COMP_RX_PIN);
 //------------------------------------------------------------------------------------------------
 //---------------------setup and loop variables---------------------------------------------------
 
-static float ground_level_pressure_hpa;
 // Enumeration of flight states
 enum FlightState: uint8_t {
   _BEFORE_FLIGHT = 0,
@@ -45,7 +60,10 @@ enum FlightState: uint8_t {
   _MAIN_COMP_SAFE_FAIL = 4
 };
 FlightState FLIGHT_STATE = FlightState::_BEFORE_FLIGHT;
-uint32_t last_read_time;
+uint32_t last_read_time, now;
+
+double temp = 15.0, pressure = 101325.0, altitude = 0.0, lat_m, lon_m, alt_m;
+double ground_level_pressure_hpa, ground_alt_m;
 
 //------------------------------------------------------------------------------------------------
 //---------------------other functions------------------------------------------------------------
@@ -55,23 +73,20 @@ void receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info
      overwritten when a new message is dispatched */
   FLIGHT_STATE = payload[0];
 };
-float temp = 15.0, pressure = 101325.0, altitude = 0.0;
 
 //------------------------------------------------------------------------------------------------
 //---------------------setup function-------------------------------------------------------------
 
 void setup() {
+  // The serial object to communicate with the main computer
+  NeoSWSerial main_s(MAIN_COMP_TX_PIN, MAIN_COMP_RX_PIN);
   PJON<ThroughSerialAsync> secure_ms(REDUNDANT_COMP_BUS_ID);
 
   Serial.begin(230400);
   while (!Serial);
 
-  Serial.println(F("Initializing communication with main computer..."));
-  main_s.begin(MAIN_COMP_BAUD_RATE);
-  secure_ms.strategy.set_serial(&main_s);
-  secure_ms.include_sender_info(false);
-  secure_ms.set_receiver(receiver_function);
-  secure_ms.begin();
+  Serial.println(F("Initializing GPS module..."));
+  neo6m.begin(GPS_BAUD_RATE);
 
   Serial.println(F("Initializing the barometer sensor..."));
   if (!bmp.begin()) {
@@ -96,6 +111,25 @@ void setup() {
                   Adafruit_BMP280::FILTER_OFF,      /* Filtering. */
                   Adafruit_BMP280::STANDBY_MS_1); /* Standby time. */
 
+  // Make sure our GPS module uses enough GPS satellites and initialize current position.
+  Serial.println(F("Searching for GPS satellites..."));
+  while (true) {
+    if (neo6m.try_read_gps(lat_m, lon_m, alt_m, MIN_NUM_GPS)) {
+      // FOUND at least 'MIN_NUM_GPS' GPS satellites!
+      alt_filter.set_pos_m(alt_m);
+      ground_alt_m = alt_m;
+      break;
+    }
+  }
+  neo6m.ss.end();
+
+  Serial.println(F("Initializing communication with main computer..."));
+  main_s.begin(MAIN_COMP_BAUD_RATE);
+  secure_ms.strategy.set_serial(&main_s);
+  secure_ms.include_sender_info(false);
+  secure_ms.set_receiver(receiver_function);
+  secure_ms.begin();
+
   Serial.println(F("Waiting for _BEFORE_FLIGHT signal from the main computer..."));
   while (!(secure_ms.receive() == PJON_ACK && FLIGHT_STATE == FlightState::_BEFORE_FLIGHT));
 
@@ -118,8 +152,11 @@ void setup() {
       last_read_time = millis();
     }
   }
+  main_s.end();
+  neo6m.ss.begin(GPS_BAUD_RATE);
 
   // TODO: TAKE OVER ALL OF THE CONTROLS FROM THE MAIN COMPUTER !!!
+  last_read_time = micros();
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -127,23 +164,35 @@ void setup() {
 
 void loop() {
 
+  now = micros();
+  // constant velocity process model
+  alt_filter.set_deltat((now - last_read_time) / 1000000.0);
+  alt_filter.predict(0.0);
+
   bmp.readTemperature(&temp);
-  Serial.print(F("Temperature = "));
-  Serial.print(temp, 6);
-  Serial.print(F(" *C"));
+  Serial.print(F("Temperature(*C): "));
+  Serial.print(temp);
 
   bmp.readPressure(&pressure);
-  Serial.print(F("\tPressure = "));
-  Serial.print(pressure, 6);
-  Serial.print(F(" Pa"));
+  Serial.print(F("\tPressure(Pa): "));
+  Serial.print(pressure);
 
-  bmp.readAltitude(&altitude, ground_level_pressure_hpa);
-  Serial.print(F("\tHeight from ground = "));
-  Serial.print(altitude, 6); /* Adjusted to local forecast! */
-  Serial.println(F(" m"));
+  // Get barometer data to update the altitude estimate
+  if (bmp.readAltitude(&altitude, ground_level_pressure_hpa)) {
+    alt_filter.set_R(BMP280_ALT_VAR);
+    alt_filter.update(altitude + ground_alt_m);
+  }
+  // Get GPS data if available and 'update' the position and velocity 'prediction's
+  if (neo6m.try_read_gps(lat_m, lon_m, alt_m)) {
+    Serial.print(F("\tGPS altitude(m): "));
+    Serial.print(alt_m, 4);
+    alt_filter.set_R(GPS_ALT_VAR);
+    alt_filter.update(alt_m);
+  }
+  Serial.print(F("\tFiltered altitude(m): "));
+  Serial.println(alt_filter.get_pos_m(), 4); /* Adjusted to local forecast! */
 
-  Serial.println();
-
+  last_read_time = now;
   //TODO: Modify FLIGHT_STATE according to the altitude estimate.
   //TODO: If recovery conditions are met, then initiate recovery (drogue&main recovery)!
   delay(8);

@@ -72,21 +72,21 @@ typedef enum {
 /** struct sensors_vec_s is used to return a vector in a common format. */
 typedef struct {
   union {
-    float v[3]; ///< 3D vector elements
+    double v[3]; ///< 3D vector elements
     struct {
-      float x; ///< X component of vector
-      float y; ///< Y component of vector
-      float z; ///< Z component of vector
+      double x; ///< X component of vector
+      double y; ///< Y component of vector
+      double z; ///< Z component of vector
     };         ///< Struct for holding XYZ component
     /* Orientation sensors */
     struct {
-      float roll; /**< Rotation around the longitudinal axis (the plane body, 'X
+      double roll; /**< Rotation around the longitudinal axis (the plane body, 'X
                      axis'). Roll is positive and increasing when moving
                      downward. -90 degrees <= roll <= 90 degrees */
-      float pitch;   /**< Rotation around the lateral axis (the wing span, 'Y
+      double pitch;   /**< Rotation around the lateral axis (the wing span, 'Y
                         axis'). Pitch is positive and increasing when moving
                         upwards. -180 degrees <= pitch <= 180 degrees) */
-      float heading; /**< Angle between the longitudinal axis (the plane body)
+      double heading; /**< Angle between the longitudinal axis (the plane body)
                         and magnetic north, measured clockwise when viewing from
                         the top of the device. 0-359 degrees */
     };               ///< Struct for holding roll/pitch/heading
@@ -99,13 +99,13 @@ typedef struct {
 /** struct sensors_color_s is used to return color data in a common format. */
 typedef struct {
   union {
-    float c[3]; ///< Raw 3-element data
+    double c[3]; ///< Raw 3-element data
     /* RGB color space */
     struct {
-      float r;   /**< Red component */
-      float g;   /**< Green component */
-      float b;   /**< Blue component */
-    };           ///< RGB data in floating point notation
+      double r;   /**< Red component */
+      double g;   /**< Green component */
+      double b;   /**< Blue component */
+    };           ///< RGB data in doubleing point notation
   };             ///< Union of various ways to describe RGB colorspace
   uint32_t rgba; /**< 24-bit RGBA value */
 } sensors_color_t;
@@ -120,20 +120,20 @@ typedef struct {
   int32_t reserved0; /**< reserved */
   int32_t timestamp; /**< time is in milliseconds */
   union {
-    float data[4];              ///< Raw data
+    double data[4];              ///< Raw data
     sensors_vec_t acceleration; /**< acceleration values are in meter per second
                                    per second (m/s^2) */
     sensors_vec_t
         magnetic; /**< magnetic vector values are in micro-Tesla (uT) */
     sensors_vec_t orientation; /**< orientation values are in degrees */
     sensors_vec_t gyro;        /**< gyroscope values are in rad/s */
-    float temperature; /**< temperature is in degrees centigrade (Celsius) */
-    float distance;    /**< distance in centimeters */
-    float light;       /**< light in SI lux units */
-    float pressure;    /**< pressure in hectopascal (hPa) */
-    float relative_humidity; /**< relative humidity in percent */
-    float current;           /**< current in milliamps (mA) */
-    float voltage;           /**< voltage in volts (V) */
+    double temperature; /**< temperature is in degrees centigrade (Celsius) */
+    double distance;    /**< distance in centimeters */
+    double light;       /**< light in SI lux units */
+    double pressure;    /**< pressure in hectopascal (hPa) */
+    double relative_humidity; /**< relative humidity in percent */
+    double current;           /**< current in milliamps (mA) */
+    double voltage;           /**< voltage in volts (V) */
     sensors_color_t color;   /**< color in RGB component values */
   };                         ///< Union for the wide ranges of data we can carry
 } sensors_event_t;
@@ -146,9 +146,9 @@ typedef struct {
   int32_t version;   /**< version of the hardware + driver */
   int32_t sensor_id; /**< unique sensor identifier */
   int32_t type;      /**< this sensor's type (ex. SENSOR_TYPE_LIGHT) */
-  float max_value;   /**< maximum value of this sensor's value in SI units */
-  float min_value;   /**< minimum value of this sensor's value in SI units */
-  float resolution; /**< smallest difference between two values reported by this
+  double max_value;   /**< maximum value of this sensor's value in SI units */
+  double min_value;   /**< minimum value of this sensor's value in SI units */
+  double resolution; /**< smallest difference between two values reported by this
                        sensor */
   int32_t min_delay; /**< min delay in microseconds between events. zero = not a
                         constant rate */
