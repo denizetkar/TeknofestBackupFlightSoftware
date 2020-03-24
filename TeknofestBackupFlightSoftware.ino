@@ -33,11 +33,12 @@
 
 #define MAIN_COMP_TX_PIN 8
 #define MAIN_COMP_RX_PIN 9
-#define MAIN_COMP_BAUD_RATE 9600
+#define MAIN_COMP_BAUD_RATE 31250
 #define REDUNDANT_COMP_BUS_ID 44
 #define MAIN_COMP_BUS_ID 45
 
 #define MAIN_COMP_TIMEOUT_MS 1000
+#define MAIN_S_FRAME_BUF_LEN 2
 
 #define CONTROLLER0_PINS 4
 #define CONTROLLER1_PINS 5
@@ -79,7 +80,8 @@ enum FlightState : uint8_t {
   _MAIN_COMP_SAFE_FAIL = 4
 };
 FlightState FLIGHT_STATE = FlightState::_BEFORE_FLIGHT;
-uint32_t last_loop_time, now, last_alt_time = 0;
+uint8_t frame_buffer[PJON_PACKET_MAX_LENGTH];
+uint32_t last_loop_time, last_alt_time;
 
 double temp = 15.0, pressure = 101325.0, altitude = 0.0, lat_m, lon_m, alt_m;
 double ground_level_pressure_hpa, ground_alt_m;
@@ -164,16 +166,19 @@ void setup() {
   // Loop until taking over the recovery management,
   // IF watchdog signal timeouts OR main computer hands over
   // the control as a soft failure (because of lack of sensor data).
-  uint8_t main_state;
+  uint8_t main_state, batch_len;
   Serial.println(F("Polling the main computer for FLIGHT_STATE until it fails..."));
   last_loop_time = millis();
   while (millis() - last_loop_time < MAIN_COMP_TIMEOUT_MS) {
-    if (main_s.available()) {
-      main_state = main_s.read();
+    batch_len = secure_ms.strategy.receive_frame(frame_buffer, MAIN_S_FRAME_BUF_LEN);
+    if (batch_len == 1) {
+      main_state = frame_buffer[0];
       if (main_state == FlightState::_MAIN_COMP_SAFE_FAIL)
         break;
-      FLIGHT_STATE = main_state;
-      last_loop_time = millis();
+      else if (main_state < FlightState::_MAIN_COMP_SAFE_FAIL) {
+        FLIGHT_STATE = main_state;
+        last_loop_time = millis();
+      }
     }
   }
   main_s.end();
@@ -189,7 +194,8 @@ void setup() {
   fin_servo1.writeMicroseconds(1500);
   fin_servo2.writeMicroseconds(1500);
   fin_servo3.writeMicroseconds(1500);
-  last_loop_time = now = micros();
+  last_loop_time = micros();
+  last_alt_time = millis();
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -198,11 +204,14 @@ void setup() {
 void loop() {
 
   // constant velocity process model
-  alt_filter.set_deltat((now - last_loop_time) / 1000000.0);
+  alt_filter.set_deltat((micros() - last_loop_time) / 1000000.0);
   alt_filter.predict(0.0);
 
+  Serial.print(F("FLIGHT_STATE: "));
+  Serial.print(FLIGHT_STATE);
+
   bmp.readTemperature(&temp);
-  Serial.print(F("Temperature(*C): "));
+  Serial.print(F("\tTemperature(*C): "));
   Serial.print(temp);
 
   bmp.readPressure(&pressure);
@@ -224,7 +233,6 @@ void loop() {
   Serial.print(F("\tFiltered altitude(m): "));
   Serial.println(alt_filter.get_pos_m(), 4); /* Adjusted to local forecast! */
 
-  last_loop_time = now;
   // Modify FLIGHT_STATE according to the altitude estimate.
   // If recovery conditions are met, then initiate recovery (drogue&main recovery)!
   if (FLIGHT_STATE == FlightState::_FLYING) {
@@ -249,7 +257,7 @@ void loop() {
   } else if (FLIGHT_STATE == FlightState::_FALLING_SLOW) {
   } else { /*FlightState::_MAIN_COMP_SAFE_FAIL*/ }
 
-  do {
-    now = micros();
-  } while (now - last_loop_time < BMP280_DATA_PERIOD_US);
+  // Wait for BMP280 data to be ready
+  while (micros() - last_loop_time < BMP280_DATA_PERIOD_US);
+  last_loop_time += BMP280_DATA_PERIOD_US;
 }
