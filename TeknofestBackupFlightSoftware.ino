@@ -2,12 +2,11 @@
 //---------------------includes-------------------------------------------------------------------
 
 #include <Adafruit_BMP280.h>
-//#include <AltSoftSerial.h>
 
 #include "Neo6MGPS.h"
 
 #define TSA_TIME_IN 0
-#define TSA_RESPONSE_TIME_OUT 5000
+#define TSA_RESPONSE_TIME_OUT 10000
 #define PJON_MAX_PACKETS 0
 #define PJON_PACKET_MAX_LENGTH 16
 #include <PJON.h>
@@ -15,8 +14,13 @@
 #include "EarthPositionFilter.h"
 #include <Servo.h>
 
+#include <float.h>
+#include <Deque.h>
+
 //------------------------------------------------------------------------------------------------
 //---------------------definitions----------------------------------------------------------------
+
+#define BMP280_DATA_PERIOD_US 8000
 
 #define BMP280_ALT_VAR 2500
 #define GPS_ALT_VAR 9
@@ -33,12 +37,15 @@
 #define REDUNDANT_COMP_BUS_ID 44
 #define MAIN_COMP_BUS_ID 45
 
-#define MAIN_COMP_TIMEOUT 1000
+#define MAIN_COMP_TIMEOUT_MS 1000
 
 #define CONTROLLER0_PINS 4
 #define CONTROLLER1_PINS 5
 #define CONTROLLER2_PINS 6
 #define CONTROLLER3_PINS 7
+
+#define APOGEE_DETECTION_DT_MS 500
+#define MAIN_RECOVERY_ALTITUDE 600
 
 //------------------------------------------------------------------------------------------------
 //---------------------setup and loop objects-----------------------------------------------------
@@ -54,6 +61,9 @@ EarthPositionFilter alt_filter;
 // Servo object for controlling fins
 Servo fin_servo0, fin_servo1, fin_servo2, fin_servo3;
 
+// deque object for storing last 3 altitude measurements
+Deque<double, 3> alt_q;
+
 //------------------------------------------------------------------------------------------------
 //---------------------setup and loop constants---------------------------------------------------
 
@@ -61,7 +71,7 @@ Servo fin_servo0, fin_servo1, fin_servo2, fin_servo3;
 //---------------------setup and loop variables---------------------------------------------------
 
 // Enumeration of flight states
-enum FlightState: uint8_t {
+enum FlightState : uint8_t {
   _BEFORE_FLIGHT = 0,
   _FLYING = 1,
   _FALLING_FAST = 2,
@@ -69,7 +79,7 @@ enum FlightState: uint8_t {
   _MAIN_COMP_SAFE_FAIL = 4
 };
 FlightState FLIGHT_STATE = FlightState::_BEFORE_FLIGHT;
-uint32_t last_read_time, now;
+uint32_t last_loop_time, now, last_alt_time = 0;
 
 double temp = 15.0, pressure = 101325.0, altitude = 0.0, lat_m, lon_m, alt_m;
 double ground_level_pressure_hpa, ground_alt_m;
@@ -87,6 +97,11 @@ void receiver_function(uint8_t *payload, uint16_t length, const PJON_Packet_Info
 //---------------------setup function-------------------------------------------------------------
 
 void setup() {
+  alt_q.resize(alt_q.max_length());
+  for (int i = 0; i < alt_q.max_length(); ++i) {
+    alt_q[i] = -DBL_MAX;
+  }
+
   // The serial object to communicate with the main computer
   NeoSWSerial main_s(MAIN_COMP_TX_PIN, MAIN_COMP_RX_PIN);
   PJON<ThroughSerialAsync> secure_ms(REDUNDANT_COMP_BUS_ID);
@@ -151,14 +166,14 @@ void setup() {
   // the control as a soft failure (because of lack of sensor data).
   uint8_t main_state;
   Serial.println(F("Polling the main computer for FLIGHT_STATE until it fails..."));
-  last_read_time = millis();
-  while (millis() - last_read_time < MAIN_COMP_TIMEOUT) {
+  last_loop_time = millis();
+  while (millis() - last_loop_time < MAIN_COMP_TIMEOUT_MS) {
     if (main_s.available()) {
       main_state = main_s.read();
       if (main_state == FlightState::_MAIN_COMP_SAFE_FAIL)
         break;
       FLIGHT_STATE = main_state;
-      last_read_time = millis();
+      last_loop_time = millis();
     }
   }
   main_s.end();
@@ -174,7 +189,7 @@ void setup() {
   fin_servo1.writeMicroseconds(1500);
   fin_servo2.writeMicroseconds(1500);
   fin_servo3.writeMicroseconds(1500);
-  last_read_time = micros();
+  last_loop_time = now = micros();
 }
 
 //-----------------------------------------------------------------------------------------------
@@ -182,9 +197,8 @@ void setup() {
 
 void loop() {
 
-  now = micros();
   // constant velocity process model
-  alt_filter.set_deltat((now - last_read_time) / 1000000.0);
+  alt_filter.set_deltat((now - last_loop_time) / 1000000.0);
   alt_filter.predict(0.0);
 
   bmp.readTemperature(&temp);
@@ -210,8 +224,32 @@ void loop() {
   Serial.print(F("\tFiltered altitude(m): "));
   Serial.println(alt_filter.get_pos_m(), 4); /* Adjusted to local forecast! */
 
-  last_read_time = now;
-  //TODO: Modify FLIGHT_STATE according to the altitude estimate.
-  //TODO: If recovery conditions are met, then initiate recovery (drogue&main recovery)!
-  delay(8);
+  last_loop_time = now;
+  // Modify FLIGHT_STATE according to the altitude estimate.
+  // If recovery conditions are met, then initiate recovery (drogue&main recovery)!
+  if (FLIGHT_STATE == FlightState::_FLYING) {
+    if (millis() - last_alt_time >= APOGEE_DETECTION_DT_MS) {
+      last_alt_time += APOGEE_DETECTION_DT_MS;
+      alt_q.pop_front();
+      alt_q.push_back(alt_filter.get_pos_m());
+      if (alt_q[2] < alt_q[1] && alt_q[1] < alt_q[0]) {
+        Serial.println(F("Apogee reached!"));
+
+        // TODO: Initiate drogue recovery HERE!!!!!!!!!!!!!!
+        FLIGHT_STATE = FlightState::_FALLING_FAST;
+      }
+    }
+  } else if (FLIGHT_STATE == FlightState::_FALLING_FAST) {
+    if (alt_filter.get_pos_m() < ground_alt_m + MAIN_RECOVERY_ALTITUDE) {
+      Serial.println(F("Less than 600m to ground!"));
+
+      //TODO: Initiate main recovery HERE!!!!!!!!!!!!!!
+      FLIGHT_STATE = FlightState::_FALLING_SLOW;
+    }
+  } else if (FLIGHT_STATE == FlightState::_FALLING_SLOW) {
+  } else { /*FlightState::_MAIN_COMP_SAFE_FAIL*/ }
+
+  do {
+    now = micros();
+  } while (now - last_loop_time < BMP280_DATA_PERIOD_US);
 }

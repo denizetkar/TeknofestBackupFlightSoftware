@@ -1,0 +1,31 @@
+#######################################
+# Syntax Coloring Map for Deque
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+Deque	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+empty	KEYWORD2
+size	KEYWORD2
+capacity	KEYWORD2
+max_length	KEYWORD2
+resize	KEYWORD2
+front	KEYWORD2
+back	KEYWORD2
+pop_front	KEYWORD2
+pop_back	KEYWORD2
+push_back	KEYWORD2
+push_front	KEYWORD2
+erase	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
