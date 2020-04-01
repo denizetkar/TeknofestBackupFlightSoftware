@@ -29,8 +29,8 @@ class EarthPositionFilter
   public:
     EarthPositionFilter() :
       pos_m{0.0}, vel_m_per_sec{0.0},
-      P{10.0, 0.0, 0.0, 10.0},
-      proc_var{9.0}, R{9.0} {}
+      P{100.0, 0.0, 0.0, 100.0},
+      proc_var{9.0}, R{25.0} {}
 
     // getter functions
     double get_pos_m();
